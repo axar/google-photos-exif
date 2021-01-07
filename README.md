@@ -108,9 +108,9 @@ Takeout
     ...
 ```
 
-2. an `outputDir` directory path, which is where the tool will write its output
+2. an `outputDir` directory path, which is where the tool will write its output. This is optional.
 
-This needs to be an empty directory anywhere on disk.
+This needs to be an empty directory anywhere on disk. If `outputDir` is not set or an empty string `''` the tool will not copy any file. It runs the process in place and modifies the files in `inputDir`.
 
 ## Supported file types
 
@@ -119,6 +119,12 @@ This tool currently only extracts the following "media file" types. Any other fi
 - .jpeg
 - .gif
 - .mp4
+- .3gp
+- .mov
+- .mts
+- .avi
+- .heic
+- .png
 
 ## What does the tool do?
 
@@ -129,7 +135,7 @@ The tool will do the following:
    
    a. Look for a corresponding sidecar JSON metadata file (see the section below for more on this) and if found, read the `photoTakenTime` field
    
-   b. Copy the media file to the output directory
+   b. Copy the media file to the output directory if `outputDir` is set
 
    c. Update the file modification date to the `photoTakenTime` found in the JSON metadata
    
@@ -155,7 +161,7 @@ It appears that images that were edited using Google Photos (e.g. rotated or edi
 
 For example, for image file `foo-edited.jpg` we _don't_ get `foo-edited.json` nor `foo-edited.jpg.json`. Instead we must rely on the JSON file from the original image.
 
-To work around this, for any images with a suffix of `-edited`, this tool will ignore that suffix and look for the JSON file from the original image, e.g. `foo.json` or `foo.jpg.json`.
+To work around this, for any images with a suffix of `-edited`, this tool will ignore that suffix and look for the JSON file from the original image, e.g. `foo.json` or `foo.jpg.json`. This work for German libraries as well, images have the suffix `-bearbeitet`.
 
 ### Files with numbered suffixes (e.g. "foo(1).jpg") follow a different pattern for the naming of JSON files
 

@@ -25,15 +25,18 @@ class GooglePhotosExif extends Command {
     outputDir: flags.string({
       char: 'd',
       description: 'Directory into which the processed output will be written',
-      required: true,
+      default: '',
+      required: false,
     }),
   }
 
   static args: Parser.args.Input  = []
+  static copyToOutputDir: boolean = false;
 
   async run() {
     const { args, flags} = this.parse(GooglePhotosExif);
     const { inputDir, outputDir } = flags;
+    GooglePhotosExif.copyToOutputDir = outputDir !== '';
 
     try {
       const directories = this.determineDirectoryPaths(inputDir, outputDir);
@@ -60,32 +63,37 @@ class GooglePhotosExif extends Command {
       throw new Error('The input directory must exist');
     }
 
-    if (!directories.output) {
-      throw new Error('You must specify an output directory using the --outputDir flag');
-    }
-
-    const outputFolderExists = existsSync(directories.output);
-    if (outputFolderExists) {
-      const outputFolderContents = await readdir(directories.output);
-      const outputFolderContentsExcludingDSStore = outputFolderContents.filter(filename => filename !== '.DS_Store');
-      const outputFolderIsEmpty = outputFolderContentsExcludingDSStore.length === 0;
-      if (!outputFolderIsEmpty) {
-        throw new Error('If the output directory already exists, it must be empty');
+    if (directories.output) {
+      const outputFolderExists = existsSync(directories.output);
+      if (outputFolderExists) {
+        const outputFolderContents = await readdir(directories.output);
+        const outputFolderContentsExcludingDSStore = outputFolderContents.filter(filename => filename !== '.DS_Store');
+        const outputFolderIsEmpty = outputFolderContentsExcludingDSStore.length === 0;
+        if (!outputFolderIsEmpty) {
+          throw new Error('If the output directory already exists, it must be empty');
+        }
+      } else {
+        this.log(`--- Creating output directory: ${directories.output} ---`);
+        await mkdir(directories.output);
       }
-    } else {
-      this.log(`--- Creating output directory: ${directories.output} ---`);
-      await mkdir(directories.output);
     }
   }
 
   private async processMediaFiles(directories: Directories): Promise<void> {
     this.log(`--- Finding supported media files (${SUPPORTED_MEDIA_FILE_EXTENSIONS.join(', ')}) ---`)
     const mediaFiles = await findSupportedMediaFiles(directories.input, directories.output);
+    const copyToOutputDir = GooglePhotosExif.copyToOutputDir;
 
     const jpegs = mediaFiles.filter(mediaFile => mediaFile.mediaFileExtension.toLowerCase() === '.jpeg' || mediaFile.mediaFileExtension.toLowerCase() === '.jpg');
     const gifs = mediaFiles.filter(mediaFile => mediaFile.mediaFileExtension.toLowerCase() === '.gif');
     const mp4s = mediaFiles.filter(mediaFile => mediaFile.mediaFileExtension.toLowerCase() === '.mp4');
-    this.log(`--- Found ${jpegs.length} JPEGs, ${gifs.length} GIFs and ${mp4s.length} MP4s ---`);
+    const tgps = mediaFiles.filter(mediaFile => mediaFile.mediaFileExtension.toLowerCase() === '.3gp');
+    const movs = mediaFiles.filter(mediaFile => mediaFile.mediaFileExtension.toLowerCase() === '.mov');
+    const mtss = mediaFiles.filter(mediaFile => mediaFile.mediaFileExtension.toLowerCase() === '.mts');
+    const avis = mediaFiles.filter(mediaFile => mediaFile.mediaFileExtension.toLowerCase() === '.avi');
+    const heics = mediaFiles.filter(mediaFile => mediaFile.mediaFileExtension.toLowerCase() === '.heic');
+    const pngs = mediaFiles.filter(mediaFile => mediaFile.mediaFileExtension.toLowerCase() === '.png');
+    this.log(`--- Found ${jpegs.length} JPEGs, ${gifs.length} GIFs, ${mp4s.length} MP4s, ${tgps.length} 3gps, ${movs.length} MOVs, ${mtss.length} MTSs, ${avis.length} AVIs, ${heics.length} HEICs and ${pngs.length} PNGs ---`);
 
     this.log(`--- Processing media files ---`);
     const fileNamesWithEditedExif: string[] = [];
@@ -93,8 +101,12 @@ class GooglePhotosExif extends Command {
     for (let i = 0, mediaFile; mediaFile = mediaFiles[i]; i++) {
 
       // Copy the file into output directory
-      this.log(`Processing file ${i} of ${mediaFiles.length}: ${mediaFile.mediaFilePath} -> ${mediaFile.outputFileName}`);
-      // await copyFile(mediaFile.mediaFilePath, mediaFile.outputFilePath);
+      if (copyToOutputDir) {
+        this.log(`Copying file ${i} of ${mediaFiles.length}: ${mediaFile.mediaFilePath} -> ${mediaFile.outputFileName}`);
+        await copyFile(mediaFile.mediaFilePath, mediaFile.outputFilePath);
+      } else {
+        this.log(`Processing file ${i} of ${mediaFiles.length}: ${mediaFile.mediaFilePath}`);
+      }
 
       // Process the output file, setting the modified timestamp and/or EXIF metadata where necessary
       const photoTimeTaken = await readPhotoTakenTimeFromGoogleJson(mediaFile);
@@ -103,18 +115,18 @@ class GooglePhotosExif extends Command {
         if (mediaFile.supportsExif) {
           const hasExifDate = await doesFileHaveExifDate(mediaFile.mediaFilePath);
           if (!hasExifDate) {
-            await updateExifMetadata(mediaFile.mediaFilePath, photoTimeTaken);
-            fileNamesWithEditedExif.push(mediaFile.mediaFileName);
-            this.log(`Wrote "DateTimeOriginal" EXIF metadata to: ${mediaFile.mediaFileName}`);
+            await updateExifMetadata(copyToOutputDir ? mediaFile.outputFilePath : mediaFile.mediaFilePath, photoTimeTaken);
+            fileNamesWithEditedExif.push(copyToOutputDir ? mediaFile.outputFileName : mediaFile.mediaFileName);
+            this.log(`Wrote "DateTimeOriginal" EXIF metadata to: ${copyToOutputDir ? mediaFile.outputFileName : mediaFile.mediaFileName}`);
           }
         }
 
-        await updateFileModificationDate(mediaFile.mediaFilePath, photoTimeTaken);
+        await updateFileModificationDate(copyToOutputDir ? mediaFile.outputFilePath : mediaFile.mediaFilePath, photoTimeTaken);
       }
     }
 
     // Log a summary
-    this.log(`--- Processed ${mediaFiles.length} media files (${jpegs.length} JPEGs, ${gifs.length} GIFs and ${mp4s.length} MP4s) ---`);
+    this.log(`--- Processed ${mediaFiles.length} media files (${jpegs.length} JPEGs, ${gifs.length} GIFs, ${mp4s.length} MP4s, ${tgps.length} 3gps, ${movs.length} MOVs, ${mtss.length} MTSs, ${avis.length} AVIs, ${heics.length} HEICs and ${pngs.length} PNGs) ---`);
     this.log(`--- The file modified timestamp has been updated on all media files ---`)
     if (fileNamesWithEditedExif.length > 0) {
       this.log(`--- Found ${fileNamesWithEditedExif.length} files which support EXIF, but had no DateTimeOriginal field. For each of the following files, the DateTimeOriginalField has been updated using the date found in the JSON metadata: ---`);

@@ -10,6 +10,7 @@ export function getCompanionJsonPathForMediaFile(mediaFilePath: string): string|
   // These images don't have their own .json sidecars - for these we'd want to use the JSON sidecar for the original image
   // so we can ignore the "-edited" suffix if there is one
   mediaFileNameWithoutExtension = mediaFileNameWithoutExtension.replace(/[-]edited$/i, '');
+  mediaFileNameWithoutExtension = mediaFileNameWithoutExtension.replace(/[-]bearbeitet$/i, '');
 
   // The naming pattern for the JSON sidecar files provided by Google Takeout seem to be inconsistent. For `foo.jpg`,
   // the JSON file is sometimes `foo.json` but sometimes it's `foo.jpg.json`. Here we start building up a list of potential

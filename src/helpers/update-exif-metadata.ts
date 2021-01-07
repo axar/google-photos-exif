@@ -11,7 +11,12 @@ export async function updateExifMetadata(filePath: string, timeTaken: string): P
 
   await exiftool.write(filePath, {
     DateTimeOriginal: timeTaken,
+  }).then(async () => {
+    await unlink(`${filePath}_original`); // exiftool will rename the old file to {filename}_original, we can delete that
+  }).catch(error => {
+    // workaround to avoid MVIMG_ jpegs that are actually MOVs of the moving picture
+    if (!error.toString().includes('Not a valid JPG (looks more like a MOV)')) {
+      throw error;
+    }
   });
-
-  await unlink(`${filePath}_original`); // exiftool will rename the old file to {filename}_original, we can delete that
 }
